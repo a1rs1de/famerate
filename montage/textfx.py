@@ -1,15 +1,28 @@
 """Рендер текста в стиле референса: контур + deep glow. Возвращает RGBA PNG."""
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops
 
+import os, glob
+
+# Шрифт референса — Druk Wide Bold (платный). Если положить файл в fonts/ (имя содержит "Druk" и "Wide"),
+# он подхватится автоматически для всех текстов; иначе — запасные бесплатные шрифты.
+def _druk():
+    for p in glob.glob("fonts/*"):
+        n = os.path.basename(p).lower()
+        if "druk" in n and "wide" in n and n.endswith((".ttf", ".otf")) and "bold" in n:
+            return p
+    return None
+
+DRUK = _druk()
 FONTS = {
-    "headline": ("fonts/Unbounded.ttf", 900),   # «ГОЛОС», «20 СЕКУНД»
-    "caption":  ("fonts/Montserrat.ttf", 800),  # субтитры внизу
+    "headline": (DRUK, None) if DRUK else ("fonts/Unbounded.ttf", 900),
+    "caption":  (DRUK, None) if DRUK else ("fonts/Montserrat.ttf", 800),
 }
 
 def font(kind, size):
     path, wght = FONTS[kind]
     f = ImageFont.truetype(path, size)
-    f.set_variation_by_axes([wght])
+    if wght:
+        f.set_variation_by_axes([wght])
     return f
 
 def render(text, kind="caption", size=64, fill="#ffffff", outline=None, outline_w=0,
