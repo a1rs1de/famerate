@@ -5,34 +5,45 @@ import os, glob
 
 # Шрифт референса — Druk Wide Bold (платный). Если положить файл в fonts/ (имя содержит "Druk" и "Wide"),
 # он подхватится автоматически для всех текстов; иначе — запасные бесплатные шрифты.
-def _druk():
-    for p in glob.glob("fonts/*"):
+def _druks():
+    out = []
+    for p in sorted(glob.glob("fonts/*")):
         n = os.path.basename(p).lower()
         if "druk" in n and "wide" in n and n.endswith((".ttf", ".otf")) and "bold" in n:
-            return p
-    return None
+            out.append(p)
+    return out
 
-DRUK = _druk()
-FONTS = {
-    "headline": (DRUK, None) if DRUK else ("fonts/Unbounded.ttf", 900),
-    "caption":  (DRUK, None) if DRUK else ("fonts/Montserrat.ttf", 800),
-}
+DRUK = _druks()
+FALLBACK = {"headline": ("fonts/Unbounded.ttf", 900), "caption": ("fonts/Montserrat.ttf", 800)}
 
-def font(kind, size):
-    path, wght = FONTS[kind]
+def _covers(path, text):
+    from fontTools.ttLib import TTFont
+    cmap = TTFont(path).getBestCmap()
+    return all(ord(c) in cmap for c in text if not c.isspace())
+
+def pick(kind, text):
+    """Druk Wide, если он содержит все символы текста (в текущем файле нет кириллицы), иначе запасной."""
+    for p in DRUK:
+        if _covers(p, text):
+            return p, None
+    return FALLBACK[kind]
+
+def font(kind, size, text=""):
+    path, wght = pick(kind, text)
     f = ImageFont.truetype(path, size)
     if wght:
         f.set_variation_by_axes([wght])
     return f
 
 def render(text, kind="caption", size=64, fill="#ffffff", outline=None, outline_w=0,
-           glow=None, glow_strength=1.0, tracking=-0.02, pad=160, max_width=None):
+           glow=None, glow_strength=1.0, tracking=-0.02, pad=None, max_width=None):
     """glow: цвет свечения или None. Свечение = сумма гауссовых размытий разной силы (deep glow)."""
     if max_width:  # автоподгонка под ширину кадра
-        probe = font(kind, size)
+        probe = font(kind, size, text)
         tw = sum(probe.getlength(c) + tracking * size for c in text)
         if tw > max_width: size = int(size * max_width / tw)
-    f = font(kind, size)
+    f = font(kind, size, text)
+    if pad is None: pad = int(size * 1.8) if glow else 20
     # ручной трекинг
     adv = [f.getlength(c) + tracking * size for c in text]
     w = int(sum(adv)); h = int(size * 1.4)

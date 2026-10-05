@@ -1,3 +1,6 @@
 .venv/
 src/
 __pycache__/
+fonts/*[Dd]ruk*
+out/chk_*
+out/last8.png
