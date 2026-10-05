@@ -11,6 +11,7 @@ os.makedirs("out", exist_ok=True)
 CYAN, YEL = "#27c7e6", "#ffd92e"
 G1_CROP = (459, 178, 986, 740)     # плеер внутри gameplay1 (x,y,w,h)
 G2_CROP = (294, 178, 1318, 740)    # плеер внутри gameplay2
+G2_43 = (414, 178, 986, 740)       # 4:3 вырезка из плеера gameplay2 (для карточки хука)
 
 def ss(a, b, t): x = min(1, max(0, (t - a) / (b - a))); return x * x * (3 - 2 * x)
 
@@ -85,16 +86,19 @@ def kf(keys, t):  # keys: [(t,cx,cy,cw)] со smoothstep
 PROFILE = cv2.cvtColor(cv2.imread("src/profile.jpg"), cv2.COLOR_BGR2RGB)[0:880]
 TG = "src/tg_post.png"
 def tg_img():
-    if os.path.exists(TG): return cv2.cvtColor(cv2.imread(TG), cv2.COLOR_BGR2RGB)
+    if os.path.exists(TG):
+        im = cv2.cvtColor(cv2.imread(TG), cv2.COLOR_BGR2RGB); h, w = im.shape[:2]
+        im = im[int(h * .15):int(h * .92), int(w * .015):int(w * .82)]                      # только сам пост, без реакций сверху и плашки снизу
+        return cv2.GaussianBlur(im, (0, 0), 5)             # размытие как в референсе
     im = np.zeros((900, 900, 3), np.uint8); im[:] = (28, 24, 44)      # заглушка, пока нет tg_post.png
     for i, (y, w) in enumerate([(120, 600), (190, 760), (250, 700), (330, 780), (400, 500), (500, 720), (570, 640)]):
         cv2.rectangle(im, (70, y), (70 + w, y + 36), (70, 60, 120), -1)
     return cv2.GaussianBlur(im, (0, 0), 9)
 
 SEGS = [
- dict(a=0.00, b=1.367, kind="hook", src="gameplay1", ss=1.0),
- dict(a=1.367, b=2.000, kind="hook", src="gameplay1", ss=1.0 + 1.367),
- dict(a=2.000, b=2.933, kind="hook", src="gameplay1", ss=1.0 + 2.0),
+ dict(a=0.00, b=1.367, kind="hook", src="gameplay2", ss=4.45, crop="g2"),   # убийство ножом
+ dict(a=1.367, b=2.000, kind="hook", src="gameplay1", ss=6.55),            # AWP: выстрел на 7.1 с
+ dict(a=2.000, b=2.933, kind="hook", src="gameplay1", ss=6.55 + 0.633),
  dict(a=2.933, b=4.433, kind="profile"),
  dict(a=4.433, b=6.600, kind="tg"),
  dict(a=6.600, b=9.167, kind="screen", src="new_b", ss=0.6, text="и переходим уже",
@@ -131,7 +135,7 @@ def render(seg, i, local, srcframe):
     if k == "hook":
         f = BG["red"].copy()
         if srcframe is not None:
-            z = 1.0 + .05 * (seg["a"] + t) / 2.9; img = crop(srcframe, G1_CROP); h, w = img.shape[:2]
+            z = 1.0 + .05 * (seg["a"] + t) / 2.9; img = crop(srcframe, G2_43 if seg.get('crop') == 'g2' else G1_CROP); h, w = img.shape[:2]
             cw, ch = int(w / z), int(h / z); img = img[(h - ch) // 2:(h - ch) // 2 + ch, (w - cw) // 2:(w - cw) // 2 + cw]
             card(f, img, W / 2, 720, 960, border=(255, 255, 255, 60))
         overlay_hook(f, i, t); return f
@@ -140,7 +144,7 @@ def render(seg, i, local, srcframe):
         card(f, PROFILE, W / 2, 800, int(900 * z), border=(255, 255, 255, 40))
         paste(f, txt("в шапке профиля", "caption", 84, "#fff", None, 0, "#fff", .35), W / 2, 1480, *pop(t)); return f
     if k == "tg":
-        f = BG["dark"].copy(); z = 1.04 - .04 * ss(0, .25, t); card(f, tg_img(), W / 2, 780, int(900 * z), border=(255, 255, 255, 40))
+        f = BG["dark"].copy(); z = 1.04 - .04 * ss(0, .25, t); card(f, tg_img(), W / 2, 800, int(600 * z), border=(255, 255, 255, 40))
         paste(f, txt("телеграм канал", "caption", 84, "#fff", None, 0, "#fff", .35), W / 2, 1480, *pop(t)); return f
     if k == "screen":
         cx, cy, cw = kf(seg["keys"], t); cw *= 1 - .06 * (1 - ss(0, .2, t))
